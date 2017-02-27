@@ -1,7 +1,9 @@
 from collections import defaultdict, namedtuple
 from itertools import chain
 from operator import itemgetter
+from abc import abstractmethod, ABCMeta
 import typing
+from random import choice
 
 import graph_tool
 import graph_tool.draw
@@ -14,7 +16,6 @@ WeightedEdge = namedtuple('WeightedEdge', ['vertex', 'weight'])
 
 class INode:
     # __slots__ = ['__value', '__index']
-
     def __init__(self, value: object, index: int) -> None:
         self.__value = value
         self.__index = index
@@ -60,14 +61,14 @@ class UnorientedNode(INode):
         self.edges = defaultdict(int)
         super().__init__(value, index)
 
-    def add_edge(self, node: UnorientedNode) -> None:
+    def add_edge(self, node: 'UnorientedNode') -> None:
         """
         Add new edge
         :param node: node which will be connected with this node
         """
         self.edges[node] += 1
 
-    def del_edge(self, node: UnorientedNode) -> None:
+    def del_edge(self, node: 'UnorientedNode') -> None:
         """
         Delete edge
         :param node: node edge to which will be removed
@@ -85,12 +86,13 @@ class UnorientedNode(INode):
         """
         return len(self.edges)
 
-    def neighbours(self) -> typing.Generator(UnorientedNode):
+    def neighbours(self) -> typing.Generator['UnorientedNode', None, None]:
         """
-        Get generator over connected nodes
+        Generator over connected nodes
         :return: generator over nodes connected with this node
         """
-        return (node for node in self.edges)
+        for node in self.edges:
+            yield node
 
 
 class OrientedNode(INode):
@@ -101,19 +103,19 @@ class OrientedNode(INode):
         self.in_edges = defaultdict(int)
         super().__init__(value, index)
 
-    def add_out_edge(self, node: OrientedNode) -> None:
+    def add_out_edge(self, node: 'OrientedNode') -> None:
         self.out_edges[node] += 1
 
-    def add_in_edge(self, node: OrientedNode) -> None:
+    def add_in_edge(self, node: 'OrientedNode') -> None:
         self.in_edges[node] += 1
 
-    def del_out_edge(self, node: OrientedNode) -> None:
+    def del_out_edge(self, node: 'OrientedNode') -> None:
         if self.out_edges[node]:
             self.out_edges[node] -= 1
         else:
             self.out_edges.pop(node)
 
-    def del_in_edge(self, node: OrientedNode) -> None:
+    def del_in_edge(self, node: 'OrientedNode') -> None:
         if self.out_edges[node]:
             self.out_edges[node] -= 1
         else:
@@ -127,7 +129,10 @@ class OrientedNode(INode):
     def out_degree(self) -> int:
         return sum(self.out_edges.values())
 
-    def pop_out_node(self) -> typing.Tuple(OrientedNode, int):
+    def get_out_node(self) -> 'OrientedNode':
+        return choice(self.out_edges)
+
+    def pop_out_node(self) -> typing.Optional[typing.Tuple('OrientedNode', int)]:
         """
         Pop out node with all edges leading to it
         :return: Node and number of edges leading to this node
@@ -137,7 +142,7 @@ class OrientedNode(INode):
             return None, None
         return self.out_edges.popitem()
 
-    def pop_in_node(self) -> typing.Tuple(OrientedNode, int):
+    def pop_in_node(self) -> typing.Optional[typing.Tuple('OrientedNode', int)]:
         """
         Pop out node with all edges leading to it
         :return: Node and number of edges leading to this node
@@ -147,41 +152,67 @@ class OrientedNode(INode):
             return None, None
         return self.in_edges.popitem()
 
-    def children_count(self):
+    @property
+    def children_count(self) -> int:
         return len(self.out_edges)
 
-    def parents_count(self):
+    @property
+    def parents_count(self) -> int:
         return len(self.in_edges)
 
-    def neighbours_count(self):
-        return self.parents_count() + self.children_count()
+    @property
+    def neighbours_count(self) -> int:
+        return self.parents_count + self.children_count
 
-    def children(self):
-        return (child for child in self.out_edges)
+    def children(self) -> typing.Generator['OrientedNode', None, None]:
+        for child in self.out_edges:
+            yield child
 
-    def parents(self):
-        return (parent for parent in self.in_edges)
+    def parents(self) -> typing.Generator['OrientedNode', None, None]:
+        for parent in self.in_edges:
+            yield parent
 
-    def neighbours(self):
+    def neighbours(self) -> typing.Generator['OrientedNode', None, None]:
         return chain(self.out_edges, self.in_edges)
 
 
 class WeightedNode(OrientedNode):
+
     def __init__(self, value, index):
         super().__init__(value, index)  # Костыль, так как иначе in/out_edges определяются как словари из OrientedNode
-        self.out_edges = []  # TODO: сделать связный список
-        self.in_edges = []
+        self.out_edges = {}
+        self.out_edges_sorted_by_weights = []
+        self.out_edges_to_sort = []
+        self.in_edges = {}
+        self.in_edges_to_sort = []
+        self.in_edges_sorted_by_weights = []
 
-    def add_in_edge(self, node, weight) -> None:
+    def add_in_edge(self, node: OrientedNode, weight: typing.Any) -> None:
         """
-
+        Add incoming edge
         :param node: 
         :param weight: 
         """
-        self.in_edges.append(WeightedEdge(node, weight))
+        self.in_edges[node] = weight
+        self.in_edges_to_sort.append(WeightedEdge(node, weight))
 
-    def add_out_edge(self, node, weight):
-        self.out_edges.append(WeightedEdge(node, weight))
+    def add_out_edge(self, node: OrientedNode, weight: typing.Any) -> None:
+        """
+        Add outcoming edge
+        :param node:
+        :param weight:
+        """
+        self.out_edges[node] = weight
+        self.out_edges_to_sort.append(WeightedEdge(node, weight))
+
+    def del_in_edge(self, node, weight):
+        pass
+        # if weight in self.in_edges[node]:
+        #     self.in_edges[node].remove(weight)
+        #     if not self.in_edges[node]:
+        #         self.in_edges.pop(node)
+        # else:
+        #     print('Edge doesn\'t exist')
 
     def del_out_edge(self, node, weight):
         pass
@@ -192,78 +223,73 @@ class WeightedNode(OrientedNode):
         # else:
         #     print('Edge doesn\'t exist')
 
-    def del_in_edge(self, node, weight):  # может будет чуть быстрее один раз присвоить self.out_edges[node] переменной
-        pass
-        # if weight in self.in_edges[node]:
-        #     self.in_edges[node].remove(weight)
-        #     if not self.in_edges[node]:
-        #         self.in_edges.pop(node)
-        # else:
-        #     print('Edge doesn\'t exist')
+    def pop_in_edge(self):
+        if not self.in_edges:
+            return None, None
+        node = choice(self.in_edges.keys())
+        return self.in_edges.pop(node)
 
     def pop_out_edge(self):
         if not self.out_edges:
             return None, None
-        return self.out_edges.pop()
-
-    def pop_in_edge(self):
-        return self.in_edges.pop()
+        node = choice(self.out_edges.keys())
+        return self.out_edges.pop(node)
 
     def sort_out_weight(self, reverse):
-        self.out_edges.sort(key=itemgetter(1), reverse=reverse)
+        self.out_edges_sorted_by_weights = sorted(self.out_edges_to_sort, key=itemgetter(1), reverse=reverse)
 
     def sort_in_weight(self, reverse):
-        self.in_edges.sort(key=itemgetter(1), reverse=reverse)
+        self.in_edges_sorted_by_weights = sorted(self.in_edges_to_sort, key=itemgetter(1), reverse=reverse)
 
 
 class IGraph:
     __slots__ = ['nodes', 'length']
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.nodes = {}
         self.length = 0
 
-    def add_edge(self, value1, value2):
+    def add_edge(self, value1, value2) -> None:
         raise NotImplementedError
 
-    def add_node(self, value):
+    def add_node(self, value) -> None:
         raise NotImplementedError
 
-    def adjacency_list(self):
+    def adjacency_list(self) -> None:
         raise NotImplementedError
 
-    def get_node(self, value):
+    def get_node(self, value) -> None:
         raise NotImplementedError
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
 
 class OrientedGraph(IGraph):
     __slots__ = ['nodes', 'cycles', 'node_state', 'length']
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.cycles = []
         self.node_state = None
         super().__init__()
 
-    def find_start(self):
+    def find_start(self) -> typing.Optional[OrientedNode]:
         for n in self.nodes.values():
             if n.in_degree == 0:
                 return n
         return None
 
-    def add_edge(self, value1, value2):
+    def add_edge(self, value1, value2) -> None:
         node1 = self.get_node(value1)
         node2 = self.get_node(value2)
         node1.add_out_edge(node2)
         node2.add_in_edge(node1)
 
-    def add_node(self, value):
+    def add_node(self, value) -> None:
         self.nodes[value] = OrientedNode(value, len(self.nodes) + 1)
         self.length += 1
 
-    def get_node(self, value):
+    def get_node(self, value) -> OrientedNode:
         if value not in self.nodes:
             self.add_node(value)
         return self.nodes[value]
@@ -300,10 +326,10 @@ class OrientedGraph(IGraph):
         dfs(start_node)
         self.node_state[start_node][1] = time
 
-    def topology_sort(self):
+    def topology_sort(self) -> None:
         if self.cycles:
             print('No topology sort is avaliable since graph has cycles')
-            return None
+            return
         for node in self.nodes.values():
             node.index = self.length - self.node_state[node][1]
 
@@ -316,23 +342,19 @@ class OrientedGraph(IGraph):
             #             self.dfs(v)
             #     return connected_components
 
-            # def __deepcopy__(self, memodict={}):
-            #     copy = OrientedGraph()
-            #     copy.nodes = deepcopy(self.nodes, memodict)
-            #     return copy
-
 
 class UnorientedGraph(IGraph):
-    def add_edge(self, value1, value2):
+
+    def add_edge(self, value1, value2) -> None:
         node1 = self.get_node(value1)
         node2 = self.get_node(value2)
         node1.add_edge(node2)
         node2.add_edge(node1)
 
-    def add_node(self, value):
+    def add_node(self, value) -> None:
         self.nodes[value] = UnorientedNode(value, len(self.nodes) + 1)
 
-    def get_node(self, value):
+    def get_node(self, value) -> UnorientedNode:
         if value not in self.nodes:
             self.add_node(value)
         return self.nodes[value]
@@ -357,35 +379,36 @@ class UnorientedGraph(IGraph):
 
 
 class WeightedGraph(OrientedGraph):
-    def add_edge(self, value1, value2, weight):
+
+    def add_edge(self, value1, value2, weight) -> None:
         node1 = self.get_node(value1)
         node2 = self.get_node(value2)
         node1.add_out_edge(node2, weight)
         node2.add_in_edge(node1, weight)
 
-    def add_node(self, value):
+    def add_node(self, value) -> None:
         self.nodes[value] = WeightedNode(value, len(self.nodes) + 1)
 
-    def sort_out_by_weight(self, reverse=False):
+    def sort_out_by_weight(self, reverse=False) -> None:
         for vertex in self.nodes.values():
             vertex.sort_out_weight(reverse)
 
-    def sort_in_by_weight(self, reverse=False):
+    def sort_in_by_weight(self, reverse=False) -> None:
         for vertex in self.nodes.values():
             vertex.sort_in_weight(reverse)
 
-    def dfs(self, node):
+    def dfs(self, node) -> None:
         for weighted_edge in node.children():
             if not weighted_edge.vertex.visited:
                 weighted_edge.vertex.visited = True
                 self.dfs(weighted_edge.vertex)
 
-    def adjacency_list(self):
+    def adjacency_list(self) -> None:
         for vertex in self.nodes.values():
             for weighted_edge in vertex.children():
                 print('{} -> {} : {}'.format(vertex.index, weighted_edge.vertex.index, weighted_edge.weight))
 
-    def draw(self, name):
+    def draw(self, name) -> None:
         g = graph_tool.Graph()
         # print(len(list(self.vertices.values())))
         visited = {}
@@ -402,7 +425,7 @@ class WeightedGraph(OrientedGraph):
         graph_tool.draw.graph_draw(g, vertex_font_size=1, output_size=(1000, 1000),
                                    vertex_size=4, vertex_color=[1, 1, 1, 0], output=name)  # vertex_text=g.vertex_index
 
-    def draw_from_start(self, start):
+    def draw_from_start(self, start) -> None:
         g = graph_tool.Graph()
         vertex_stack = [self.nodes[start]]
         while vertex_stack:
@@ -414,13 +437,13 @@ class WeightedGraph(OrientedGraph):
         graph_tool.draw.graph_draw(g, vertex_text=g.vertex_index, vertex_font_size=1, output_size=(4000, 4000),
                                    vertex_size=4, vertex_color=[1, 1, 1, 0], output="two-nodes.png")
 
-    def simplify(self):
+    def simplify(self) -> None:
         visited = set()
 
         def collapse(vertex):
             visited.add(vertex)
             vertex.value = [vertex.value]  # !!!!!
-            while vertex.children_count() == 1:
+            while vertex.children_count == 1:
                 if len(vertex.out_edges[0].vertex.in_edges) != 1:
                     break
                 vertex_, pos = vertex.pop_out_edge()
@@ -453,7 +476,7 @@ class WeightedGraph(OrientedGraph):
 
         collapse_values()
 
-    def hamiltonian_path_recursive(self, start):  # Жрет слишком много памяти
+    def hamiltonian_path_recursive(self, start) -> str:  # Жрет слишком много памяти
         node = self.nodes[start]
 
         def ham(start, path):
@@ -464,7 +487,7 @@ class WeightedGraph(OrientedGraph):
 
         return ham(node, '')
 
-    def connected_components(self):
+    def connected_components(self) -> None:
         visited = set()
         count = 0
         while len(visited) != len(self.nodes):
@@ -492,35 +515,36 @@ class WeightedGraph(OrientedGraph):
 
 
 class DeBruijnGraph(OrientedGraph):
-    def __init__(self, k):
+
+    def __init__(self, k) -> None:
         self.eulerian_walk = []
         self.k = k
         super().__init__()
 
-    def simplify_de_bruijn(self):
+    def simplify(self) -> None:
+        """
+        Turn all paths that contains nodes with one in edge and one out edge into one node
+        """
         visited = set()
         k = self.k - 1
 
-        def collapse(vertex):
-            visited.add(vertex)
+        def collapse(node: OrientedNode):
+            visited.add(node)
             value_to_append = []
-            while vertex.children_count() == 1:
-                is_fork = False
-                for node in vertex.out_edges:
-                    if node.parents_count() != 1:
-                        is_fork = True
-                        break
-                if is_fork:
+            out_nodes = node.children_count
+            out_degree = node.out_degree
+            while out_nodes == 1 and out_degree == 1:
+                next_node = node.get_out_node()
+                if next_node.parents_count != 1:
                     break
-                vertex_, _ = vertex.pop_out_edge()
-                visited.add(vertex_)
-                value_to_append.append(vertex_.value[k:])
-                vertex.out_edges = vertex_.out_edges
-                if vertex_.value[: k + 1] in self.nodes:
-                    self.nodes.pop(vertex_.value[: k + 1])
-            vertex.value += ''.join(value_to_append)
-            # print('New value', vertex.value)
-            # print('New value length', len(vertex.value))
+                node.del_out_edge(next_node)
+                visited.add(next_node)
+                value_to_append.append(next_node.value[k:])
+                out_nodes = next_node.out_edges
+                self.nodes.pop(next_node.value)
+            node.value += ''.join(value_to_append)
+            # print('New value', node.value)
+            # print('New value length', len(node.value))
 
         for read in self.nodes.copy():
             if read not in self.nodes:
@@ -530,17 +554,17 @@ class DeBruijnGraph(OrientedGraph):
                 # print('Start collapsing:', node)
                 collapse(node)
 
-    def adjacency_list(self):
+    def adjacency_list(self) -> None:
         for vertex in self.nodes.values():
             for vertex_ in vertex.children():
                 print('{} -> {}'.format(vertex.value, vertex_.value))
 
-    def eulerian_path(self):
+    def eulerian_path(self) -> None:
         stack = []
         not_visited = self.nodes.copy()  # Посмотреть что именно копируется
         node = None
         for n in self.nodes.values():  # Find start node with uneven number of edges
-            if n.children_count() - n.parents_count() == 1:
+            if n.children_count - n.parents_count == 1:
                 node = n
         if not node:
             node = next(iter(not_visited.values()))
@@ -555,7 +579,7 @@ class DeBruijnGraph(OrientedGraph):
                 node, _ = node.pop_out_edge()
         self.eulerian_walk.reverse()
 
-    def reconstruct_from_eul_walk(self):
+    def reconstruct_from_eul_walk(self) -> str:
         k = self.k - 1
         if not self.eulerian_walk:
             self.eulerian_path()
@@ -564,7 +588,7 @@ class DeBruijnGraph(OrientedGraph):
             res.append(step[k:])
         return ''.join(res)
 
-    def draw(self, name):
+    def draw(self, name) -> None:
         g = graph_tool.Graph()
         visited = {}
         for vertex in self.nodes:
