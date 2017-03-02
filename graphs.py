@@ -5,8 +5,8 @@ from abc import abstractmethod, abstractproperty, ABCMeta
 import typing
 from random import choice
 
-#import graph_tool
-#import graph_tool.draw
+import graph_tool
+import graph_tool.draw
 
 WeightedEdge = namedtuple('WeightedEdge', ['vertex', 'weight'])
 
@@ -219,6 +219,10 @@ class OrientedGraph(Graph):
             if n.in_degree == 0:
                 return n
         return None
+
+    def __eq__(self, other):
+        # TODO: Implement comparison by out_nodes and in_nodes
+        pass
 
     def add_edge(self, value1, value2) -> None:
         node1 = self.get_node(value1)
