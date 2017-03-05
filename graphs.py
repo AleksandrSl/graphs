@@ -29,11 +29,11 @@ class INode:
         self.__index = index
 
     @property
-    def value(self) -> object:
+    def value(self) -> typing.Any:
         return self.__value
 
     @value.setter
-    def value(self, value: object):
+    def value(self, value: typing.Any):
         self.__value = value
 
     def __str__(self) -> str:
@@ -45,32 +45,35 @@ class INode:
     def __repr__(self) -> str:
         return 'Node({}, {})'.format(self.value, self.index)
 
-        # TODO: implement deepcopy method
-        # @classmethod или лучше заменить __class__ на classmethod
-        # def __deepcopy__(self, memodict={}):
-        #     copy = self.__class__(self.value, self.index)
-        #     copy.in_edges = self.in_edges[:]
-        #     copy.out_edges = self.out_edges[:]
-        #     return copy
+    def __eq__(self, other):
+        return self.value == other.value
+
+    # TODO: implement deepcopy method
+    # @classmethod или лучше заменить __class__ на classmethod
+    # def __deepcopy__(self, memodict={}):
+    #     copy = self.__class__(self.value, self.index)
+    #     copy.in_edges = self.in_edges[:]
+    #     copy.out_edges = self.out_edges[:]
+    #     return copy
 
 
-class UnorientedNode(INode):
+class UndirectedNode(INode):
     __slots__ = ['__value', '__index', 'edges']
 
     def __init__(self, value: object, index: int) -> None:
         self.edges = defaultdict(int)
         super().__init__(value, index)
 
-    def add_edge(self, node: 'UnorientedNode') -> None:
-        """
-        Add new edge
+    def add_edge(self, node: 'UndirectedNode') -> None:
+        """Add new edge.
+
         :param node: node which will be connected with this node
         """
         self.edges[node] += 1
 
-    def del_edge(self, node: 'UnorientedNode') -> None:
-        """
-        Delete edge
+    def del_edge(self, node: 'UndirectedNode') -> None:
+        """Delete edge.
+
         :param node: node edge to which will be removed
         """
         if self.edges[node]:
@@ -80,22 +83,22 @@ class UnorientedNode(INode):
 
     @property
     def degree(self) -> int:
-        """
-        Get degree of the edge
+        """Degree of the edge.
+
         :return: number of connected nodes
         """
         return len(self.edges)
 
-    def neighbours(self) -> typing.Generator['UnorientedNode', None, None]:
-        """
-        Generator over connected nodes
+    def neighbours(self) -> typing.Generator['UndirectedNode', None, None]:
+        """Get generator over connected nodes.
+
         :return: generator over nodes connected with this node
         """
         for node in self.edges:
             yield node
 
 
-class OrientedNode(INode):
+class DirectedNode(INode):
     __slots__ = ['__value', '__index', 'out_edges', 'in_edges']
 
     def __init__(self, value: object, index: int) -> None:
@@ -103,19 +106,63 @@ class OrientedNode(INode):
         self.in_edges = defaultdict(int)
         super().__init__(value, index)
 
-    def add_out_edge(self, node: 'OrientedNode') -> None:
-        self.out_edges[node] += 1
+    def add_in_edge(self, node: 'DirectedNode') -> None:
+        """Add in edge.
 
-    def add_in_edge(self, node: 'OrientedNode') -> None:
+        :param node: Node will be connected to
+        :return: None
+        """
         self.in_edges[node] += 1
 
-    def del_out_edge(self, node: 'OrientedNode') -> None:
+    def add_out_edge(self, node: 'DirectedNode') -> None:
+        """Add out edge.
+
+        :param node: Node will be connected to
+        :return: None
+        """
+        self.out_edges[node] += 1
+
+    def add_in_edges(self, *nodes: typing.Union[typing.Iterable['DirectedNode'], typing.List['DirectedNode']]) -> None:
+        """Add multiple in edges.
+
+        :param node: Nodes will be connected to
+        :return: None
+        """
+        if len(nodes) == 1 and issubclass(nodes, list):
+            nodes = nodes[0]
+        for node in nodes:
+            self.in_edges[node] += 1
+
+    def add_out_edges(self, *nodes: typing.Union[typing.Iterable['DirectedNode'], typing.List['DirectedNode']]) -> None:
+        """Add multiple out edges.
+
+        :param node: Nodes will be connected to
+        :return: None
+        """
+        if len(nodes) == 1 and issubclass(nodes, list):
+            nodes = nodes[0]
+        for node in nodes[0]:
+            self.out_edges[node] += 1
+
+    def del_in_edge(self, node: 'DirectedNode') -> None:
+        """Delete in edge.
+
+        :param node: Node to delete
+        :return: None
+        """
+        # Raise error on absence or return special(desired value)?
         if self.out_edges[node]:
             self.out_edges[node] -= 1
         else:
             self.out_edges.pop(node)
 
-    def del_in_edge(self, node: 'OrientedNode') -> None:
+    def del_out_edge(self, node: 'DirectedNode') -> None:
+        """Delete out edge.
+
+        :param node: Node to delete
+        :return: None
+        """
+        # Raise error on absence or return special(desired value)?
         if self.out_edges[node]:
             self.out_edges[node] -= 1
         else:
@@ -123,61 +170,100 @@ class OrientedNode(INode):
 
     @property
     def in_degree(self) -> int:
+        """
+        :return: Number of in edges
+        """
         return sum(self.in_edges.values())
 
     @property
     def out_degree(self) -> int:
+        """Number of out edges
+
+        :return: int
+        """
         return sum(self.out_edges.values())
 
-    def get_out_node(self) -> 'OrientedNode':
+    def get_out_node(self, value: str) -> 'DirectedNode':
+        """Get out node specified by value. If value is not provided return random node.
+
+        :return:  DirectedNode
+        """
+        # Not strictly random
         for node in self.out_edges:
             return node
 
-    def pop_out_node(self) -> typing.Optional[typing.Tuple['OrientedNode', int]]:
-        """
-        Pop out node with all edges leading to it
-        :return: Node and number of edges leading to this node
-        """
-        # TODO delete this node from popped node
-        if not self.out_edges:
-            return None, None
-        return self.out_edges.popitem()
+    def pop_in_node(self) -> typing.Optional[typing.Tuple['DirectedNode', int]]:
+        """Pop in node with all edges leading to it from this node.
 
-    def pop_in_node(self) -> typing.Optional[typing.Tuple['OrientedNode', int]]:
-        """
-        Pop out node with all edges leading to it
-        :return: Node and number of edges leading to this node
+        :return: (DirectedNode, int) or (None, None)
         """
         # TODO delete this node from popped node
         if not self.in_edges:
             return None, None
         return self.in_edges.popitem()
 
+    def pop_out_node(self) -> typing.Optional[typing.Tuple['DirectedNode', int]]:
+        """Pop out node with all edges leading to it from this node.
+
+        :return: (DirectedNode, int) or (None, None)
+        """
+        # TODO delete this node from popped node
+        if not self.out_edges:
+            return None, None
+        return self.out_edges.popitem()
+
     @property
-    def children_count(self) -> int:
+    def out_nodes_count(self) -> int:
+        """
+        :return: Number of out nodes
+        """
         return len(self.out_edges)
 
     @property
-    def parents_count(self) -> int:
+    def in_nodes_count(self) -> int:
+        """
+        :return: Number of in nodes
+        """
         return len(self.in_edges)
 
     @property
-    def neighbours_count(self) -> int:
-        return self.parents_count + self.children_count
+    def neighbour_nodes_count(self) -> int:
+        """
+        :return: Number of in and out nodes
+        """
+        return self.in_nodes_count + self.out_nodes_count
 
-    @property
-    def children(self) -> typing.Generator['OrientedNode', None, None]:
+    def out_nodes(self) -> typing.Generator['DirectedNode', None, None]:
+        """
+        :return: Generator over out nodes
+        """
         for child in self.out_edges:
             yield child
 
-    @property
-    def parents(self) -> typing.Generator['OrientedNode', None, None]:
+    def in_nodes(self) -> typing.Generator['DirectedNode', None, None]:
+        """
+        :return: Generator over out nodes
+        """
         for parent in self.in_edges:
             yield parent
 
-    @property
-    def neighbours(self) -> typing.Generator['OrientedNode', None, None]:
+    def neighbours(self) -> typing.Generator['DirectedNode', None, None]:
+        """
+        :return: Generator over in and out nodes
+        """
         return chain(self.out_edges, self.in_edges)
+
+    def __eq__(self, other: 'DirectedNode'):
+        if self.value != other.value:
+            return False
+        if self.in_edges != other.in_edges:
+            return False
+        if self.out_edges != other.out_edges:
+            return False
+        return True
+
+    def __hash__(self) -> int:
+        return hash(self.index)  # Не value, так как при упрощении графа в value оказывается список
 
 
 class Graph(metaclass=ABCMeta):
@@ -193,6 +279,11 @@ class Graph(metaclass=ABCMeta):
 
     @abstractmethod
     def add_node(self, value) -> None:
+        """Add new node with specified value. Do nothing if such node is already exists.
+
+        :param value: Value for the node
+        :return: None
+        """
         raise NotImplementedError
 
     @abstractmethod
@@ -204,9 +295,7 @@ class Graph(metaclass=ABCMeta):
         raise NotImplementedError
 
 
-
-
-class OrientedGraph(Graph):
+class DirectedGraph(Graph):
     __slots__ = ['nodes', 'cycles', 'node_state', 'size']
 
     def __init__(self) -> None:
@@ -214,35 +303,66 @@ class OrientedGraph(Graph):
         self.node_state = None
         super().__init__()
 
-    def find_start(self) -> typing.Optional[OrientedNode]:
-        for n in self.nodes.values():
-            if n.in_degree == 0:
-                return n
-        return None
+    def find_start(self) -> typing.Optional[DirectedNode]:
+        """Get node without incoming edges.
 
-    def __eq__(self, other):
+        :return: DirectedNode or None
+        """
+        for node in self.nodes.values():
+            if node.in_degree == 0:
+                return node
+
+    def __eq__(self, other: 'DirectedGraph'):
+        for node in self.nodes:
+            if node not in other.nodes:
+                return False
+        for value, node in self.nodes.items():
+            if node != other.nodes[value]:
+                return False
         # TODO: Implement comparison by out_nodes and in_nodes
-        pass
 
     def add_edge(self, value1, value2) -> None:
-        node1 = self.get_node(value1)
-        node2 = self.get_node(value2)
+        """Add new edge from value1 to value2. Create nodes if they don't exist
+
+        :param value1: Value for the first node
+        :param value2: Value for the second node
+        :return: None
+        """
+        self.add_node(value1)
+        self.add_node(value2)
+        node1 = self.nodes[value1]
+        node2 = self.nodes[value2]
         node1.add_out_edge(node2)
         node2.add_in_edge(node1)
 
     def add_node(self, value) -> None:
-        self.nodes[value] = OrientedNode(value, len(self.nodes) + 1)
-        self.size += 1
+        """Add new node with specified value. Do nothing if such node is already exists.
 
-    def get_node(self, value) -> OrientedNode:
+        :param value: Value for the node
+        :return: None
+        """
         if value not in self.nodes:
-            self.add_node(value)
-        return self.nodes[value]
+            self.size += 1
+            self.nodes[value] = DirectedNode(value, self.size)
+
+    def get_node(self, value) -> typing.Optional[DirectedNode]:
+        """Get node with specified value.
+
+        :param value: Value of the node
+        :return: DirectedNode or None
+        """
+        if value in self.nodes:
+            return self.nodes[value]
 
     def adjacency_list(self):
         raise NotImplementedError
 
     def set_exit_time(self, start_value=None):
+        """Set entry and exit times for the nodes to find cycles.
+
+        :param start_value:
+        :return:
+        """
         if start_value is None:
             start_node = self.find_start()
         else:
@@ -254,7 +374,7 @@ class OrientedGraph(Graph):
 
         def dfs(n):
             nonlocal time
-            for n in n.children:
+            for n in n.out_nodes:
                 path.append(n)
                 if not self.node_state[n][0]:
                     self.node_state[n][0] = time
@@ -272,6 +392,10 @@ class OrientedGraph(Graph):
         self.node_state[start_node][1] = time
 
     def topology_sort(self) -> None:
+        """Set indexes of nodes due to their positions after topology sort
+
+        :return: None
+        """
         if self.cycles:
             print('No topology sort is avaliable since graph has cycles')
             return
@@ -288,21 +412,38 @@ class OrientedGraph(Graph):
             #     return connected_components
 
 
-class UnorientedGraph(Graph):
+class UndirectedGraph(Graph):
 
-    def add_edge(self, value1, value2) -> None:
+    def add_edge(self, value1: typing.Any, value2: typing.Any) -> None:
+        """Add new edge from value1 to value2. Create nodes if they don't exist
+
+        :param value1: Value for the first node
+        :param value2: Value for the second node
+        :return: None
+        """
         node1 = self.get_node(value1)
         node2 = self.get_node(value2)
         node1.add_edge(node2)
         node2.add_edge(node1)
 
-    def add_node(self, value) -> None:
-        self.nodes[value] = UnorientedNode(value, len(self.nodes) + 1)
+    def add_node(self, value: typing.Any) -> None:
+        """Add new node with specified value. Do nothing if such node is already exists.
 
-    def get_node(self, value) -> UnorientedNode:
+        :param value: Value for the node
+        :return: None
+        """
         if value not in self.nodes:
-            self.add_node(value)
-        return self.nodes[value]
+            self.size += 1
+            self.nodes[value] = UndirectedNode(value, self.size)
+
+    def get_node(self, value: typing.Any) -> typing.Optional[UndirectedNode]:
+        """Get node with specified value.
+
+        :param value: Value of the node
+        :return: DirectedNode or None
+        """
+        if value in self.nodes:
+            return self.nodes[value]
 
     def adjacency_list(self):
         raise NotImplementedError
@@ -323,40 +464,48 @@ class UnorientedGraph(Graph):
         #     return connected_components
 
 
-class DeBruijnGraph(OrientedGraph):
+class DeBruijnGraph(DirectedGraph):
 
     def __init__(self, k) -> None:
+        """
+        :param k: k-mer length
+        """
         self.eulerian_walk = []
         self.k = k
         super().__init__()
 
     def reset_node_value(self, old_value: str, new_value: str) -> None:
+        """Set new value for the node.
+
+        :param old_value: Old node value
+        :param new_value: New node value
+        :return: None
+        """
         node = self.nodes.pop(old_value)
         node.value = new_value
         self.nodes[new_value] = node
-        print(self.nodes)
 
     def simplify(self) -> None:
-        """
-        Turn all paths that contain nodes with one in edge and one out edge into one node
+        """Turn all paths that contain nodes with one in edge and one out edge into one node.
+
+        :return: None
         """
         visited = set()
-        k = self.k - 1
 
-        def collapse(node: OrientedNode):
+        def collapse(node: DirectedNode) -> None:
             visited.add(node)
             value_to_append = []
-            out_nodes = node.children_count
+            out_nodes_count = node.out_nodes_count
             out_degree = node.out_degree
-            while out_nodes == 1 and out_degree == 1:
+            while out_nodes_count == 1 and out_degree == 1:
                 next_node = node.get_out_node()
                 print('Next node {}'.format(next_node))
-                if next_node.parents_count != 1:
+                if next_node.in_nodes_count != 1:
                     print('Break on node {}'.format(next_node))
                     break
                 visited.add(next_node)
-                value_to_append.append(next_node.value[k:])
-                out_nodes = next_node.children_count
+                value_to_append.append(next_node.value[self.k - 1:])
+                out_nodes_count = next_node.out_nodes_count
                 out_degree = next_node.out_degree
                 self.nodes.pop(next_node.value)
                 node.out_edges = next_node.out_edges
@@ -369,20 +518,24 @@ class DeBruijnGraph(OrientedGraph):
                 continue
             node = self.nodes[read]
             if node not in visited:
-                # print('Start collapsing:', node)
                 collapse(node)
 
-    def adjacency_list(self) -> None:
+    def adjacency_list(self) -> typing.List[str]:
+        """Represent graph as the adjacency list
+
+        :return: list(str)
+        """
+        adjacency_list = []
         for vertex in self.nodes.values():
-            for vertex_ in vertex.children:
-                print('{} -> {}'.format(vertex.value, vertex_.value))
+            for vertex_ in vertex.out_nodes:
+                adjacency_list.append('{} -> {}'.format(vertex.value, vertex_.value))
 
     def eulerian_path(self) -> None:
         stack = []
         not_visited = self.nodes.copy()  # Посмотреть что именно копируется
         node = None
         for n in self.nodes.values():  # Find start node with uneven number of edges
-            if n.children_count - n.parents_count == 1:
+            if n.out_nodes_count - n.in_nodes_count == 1:
                 node = n
         if not node:
             node = next(iter(not_visited.values()))
@@ -406,7 +559,7 @@ class DeBruijnGraph(OrientedGraph):
             res.append(step[k:])
         return ''.join(res)
 
-    def draw(self, name) -> None:
+    def draw(self, name=None) -> None:
         g = graph_tool.Graph()
         visited = {}
         for vertex in self.nodes:
