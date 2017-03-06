@@ -5,8 +5,8 @@ from abc import abstractmethod, abstractproperty, ABCMeta
 import typing
 from random import choice
 
-import graph_tool
-import graph_tool.draw
+# import graph_tool
+# import graph_tool.draw
 
 WeightedEdge = namedtuple('WeightedEdge', ['vertex', 'weight'])
 
@@ -128,7 +128,7 @@ class DirectedNode(INode):
         :param node: Nodes will be connected to
         :return: None
         """
-        if len(nodes) == 1 and issubclass(nodes, list):
+        if len(nodes) == 1 and isinstance(nodes[0], list):
             nodes = nodes[0]
         for node in nodes:
             self.in_edges[node] += 1
@@ -139,9 +139,9 @@ class DirectedNode(INode):
         :param node: Nodes will be connected to
         :return: None
         """
-        if len(nodes) == 1 and issubclass(nodes, list):
+        if len(nodes) == 1 and isinstance(nodes, list):
             nodes = nodes[0]
-        for node in nodes[0]:
+        for node in nodes:
             self.out_edges[node] += 1
 
     def del_in_edge(self, node: 'DirectedNode') -> None:
@@ -183,16 +183,20 @@ class DirectedNode(INode):
         """
         return sum(self.out_edges.values())
 
-    def get_out_node(self, value: str) -> 'DirectedNode':
+    def get_out_node(self, value: str=None) -> 'DirectedNode':
         """Get out node specified by value. If value is not provided return random node.
 
         :return:  DirectedNode
         """
         # Not strictly random
         for node in self.out_edges:
-            return node
+            if not value:
+                return node
+            elif node.value == value:
+                return node
 
-    def pop_in_node(self) -> typing.Optional[typing.Tuple['DirectedNode', int]]:
+
+    def pop_in_node(self) -> typing.Union[typing.Tuple['DirectedNode', int], typing.Tuple[None, None]]:
         """Pop in node with all edges leading to it from this node.
 
         :return: (DirectedNode, int) or (None, None)
@@ -202,7 +206,7 @@ class DirectedNode(INode):
             return None, None
         return self.in_edges.popitem()
 
-    def pop_out_node(self) -> typing.Optional[typing.Tuple['DirectedNode', int]]:
+    def pop_out_node(self) -> typing.Union[typing.Tuple['DirectedNode', int], typing.Tuple[None, None]]:
         """Pop out node with all edges leading to it from this node.
 
         :return: (DirectedNode, int) or (None, None)
@@ -211,6 +215,18 @@ class DirectedNode(INode):
         if not self.out_edges:
             return None, None
         return self.out_edges.popitem()
+
+    def pop_out_edge(self) -> typing.Optional['DirectedNode']:
+        """Delete out edge and return connected node.
+
+        :return: (DirectedNode) or (None)
+        """
+        if self.out_edges:
+            for node in self.out_edges:
+                self.del_out_edge(node)
+                node.del_in_edge(self)
+                return node
+
 
     @property
     def out_nodes_count(self) -> int:
@@ -255,10 +271,6 @@ class DirectedNode(INode):
 
     def __eq__(self, other: 'DirectedNode'):
         if self.value != other.value:
-            return False
-        if self.in_edges != other.in_edges:
-            return False
-        if self.out_edges != other.out_edges:
             return False
         return True
 
@@ -345,14 +357,27 @@ class DirectedGraph(Graph):
             self.size += 1
             self.nodes[value] = DirectedNode(value, self.size)
 
-    def get_node(self, value) -> typing.Optional[DirectedNode]:
-        """Get node with specified value.
+    def get_node(self, value=None) -> typing.Optional[DirectedNode]:
+        """Get node with specified value. If no value is given get first(random?) node
 
         :param value: Value of the node
-        :return: DirectedNode or None
+        :return: DirectedNode
         """
+        if not value:
+            for node in self.nodes:
+                return node
         if value in self.nodes:
             return self.nodes[value]
+
+    def get_uneven_node(self) -> 'DirectedNode':
+        """Get node with in_degree isn't equal out_degree
+
+        :return: DirectedNode
+        """
+        for node in self.nodes.values():  # Find start node with uneven number of edges
+            if node.out_nodes_count - node.in_nodes_count == 1:
+                return node
+        return(self.get_node())
 
     def adjacency_list(self):
         raise NotImplementedError
@@ -470,7 +495,7 @@ class DeBruijnGraph(DirectedGraph):
         """
         :param k: k-mer length
         """
-        self.eulerian_walk = []
+        self.eulerian_path = []
         self.k = k
         super().__init__()
 
@@ -521,7 +546,7 @@ class DeBruijnGraph(DirectedGraph):
                 collapse(node)
 
     def adjacency_list(self) -> typing.List[str]:
-        """Represent graph as the adjacency list
+        """Represent graph as the adjacency list.
 
         :return: list(str)
         """
@@ -529,49 +554,54 @@ class DeBruijnGraph(DirectedGraph):
         for vertex in self.nodes.values():
             for vertex_ in vertex.out_nodes:
                 adjacency_list.append('{} -> {}'.format(vertex.value, vertex_.value))
+        return adjacency_list
 
-    def eulerian_path(self) -> None:
-        stack = []
-        not_visited = self.nodes.copy()  # Посмотреть что именно копируется
-        node = None
-        for n in self.nodes.values():  # Find start node with uneven number of edges
-            if n.out_nodes_count - n.in_nodes_count == 1:
-                node = n
-        if not node:
-            node = next(iter(not_visited.values()))
-        stack.append(node)
-        while node.out_edges or stack:
-            # print(node.out_edges) TODO: в графе остается куча пустых узлов, надо их удалить
-            if not node.out_edges:
-                self.eulerian_walk.append(node.value)
-                node = stack.pop()
-            else:
-                stack.append(node)
-                node, _ = node.pop_out_edge()
-        self.eulerian_walk.reverse()
+    def draw(self, output_file_name: str=None) -> None:
+        """Draw graph to screen or to file if output_file_name is provided.
 
-    def reconstruct_from_eul_walk(self) -> str:
-        k = self.k - 1
-        if not self.eulerian_walk:
-            self.eulerian_path()
-        res = [self.eulerian_walk[0]]
-        for step in self.eulerian_walk[1:]:
-            res.append(step[k:])
-        return ''.join(res)
-
-    def draw(self, name=None) -> None:
-        g = graph_tool.Graph()
+        :param output_file_name: File to draw graph to
+        :return: None
+        """
+        graph_to_draw = graph_tool.Graph()
         visited = {}
         for vertex in self.nodes:
             node = self.nodes[vertex]
             if node not in visited:
-                visited[node] = g.add_vertex()
+                visited[node] = graph_to_draw.add_vertex()
             v1 = visited[node]
             for node_, edges_n in node.out_edges.items():
                 if node_ not in visited:
-                    visited[node_] = g.add_vertex()
+                    visited[node_] = graph_to_draw.add_vertex()
                 v2 = visited[node_]
-                g.add_edge(v1, v2, add_missing=False)
+                graph_to_draw.add_edge(v1, v2, add_missing=False)
+        if output_file_name:
+            graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(500, 500),
+                                       vertex_size=10, vertex_color=[1, 1, 1, 0], output=output_file_name)
+        else:
+            graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(500, 500),
+                                       vertex_size=10, vertex_color=[1, 1, 1, 0])
 
-        graph_tool.draw.graph_draw(g, vertex_font_size=1, output_size=(500, 500),
-                                   vertex_size=10, vertex_color=[1, 1, 1, 0], output=name)  # vertex_text=g.vertex_index
+    def find_eulerian_path(self) -> None:
+        """Find eulerian path in graph. It will be set to eulerian_path graph attribute.
+
+        :return: None
+        """
+        stack = []
+        eulerian_path = []
+        node = self.get_uneven_node()
+        stack.append(node)
+        while node.out_edges or stack:
+            # print(node.out_edges) TODO: в графе остается куча пустых узлов, надо их удалить
+            if not node.out_edges:
+                eulerian_path.append(node.value)
+                node = stack.pop()
+            else:
+                stack.append(node)
+                node = node.pop_out_edge()
+        eulerian_path.reverse()
+
+        k = self.k - 1
+        self.eulerian_path.append(eulerian_path[0])
+        for step in self.eulerian_path[1:]:
+            self.eulerian_path.append(step[k:])
+        self.eulerian_path = ''.join(self.eulerian_path)
