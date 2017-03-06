@@ -1,26 +1,63 @@
 import graph_tool
+from graph_tool.draw import graph_draw
+import typing
 
-class DeBruijn():
+# class DeBruijnNode(graph_tool.Vertex):
+#
+#     def get_out_node(self):
+
+
+class DeBruijnGraph(graph_tool.Graph):
+
+
     def __init__(self, k) -> None:
         """
         :param k: k-mer length
         """
+        super().__init__()
         self.eulerian_walk = []
         self.k = k
-        super().__init__()
+        self.values = self.new_vertex_property('string')
+        self.indexes = {}
 
+    def add_edge(self, value1, value2, add_missing=True):
+        # ToDo check arguments
+        """Add new edge from value1 to value2. Create nodes if they don't exist
 
-    def reset_node_value(self, old_value: str, new_value: str) -> None:
+        :param value1: Value for the first node
+        :param value2: Value for the second node
+        :return: None
+        """
+        node1 = self.add_node(value1, return_node=True)
+        node2 = self.add_node(value2, return_node=True)
+        super(DeBruijnGraph, self).add_edge(node1, node2, False)
+
+    def add_edge_list(self, edge_list, hashed=False, string_vals=False, eprops=None):
+        super(DeBruijnGraph, self).add_edge_list((self.vertex_index[node1], self.vertex_index[node2])
+                                                  for node1, node2 in edge_list)
+
+    def add_node(self, value: str, return_node: bool=False) -> None:
+        """Add a vertex to the graph, and return it. If ``n != 1``, ``n``
+        vertices are inserted and an iterator over the new vertices is returned.
+        This operation is :math:`O(n)`.
+        """
+        if value in self.values:
+            node = self.vertex(self.indexes[value])
+        else:
+            node = self.add_vertex()
+            self.values[node] = value
+            self.indexes[value] = self.vertex_index[node]
+        if return_node:
+            return node
+
+    def reset_node_value(self, node: graph_tool.Vertex, new_value: str) -> None:
         """Set new value for the node.
 
         :param old_value: Old node value
         :param new_value: New node value
         :return: None
         """
-        node = self.nodes.pop(old_value)
-        node.value = new_value
-        self.nodes[new_value] = node
-
+        self.values[node] = new_value
 
     def simplify(self) -> None:
         """Turn all paths that contain nodes with one in edge and one out edge into one node.
@@ -29,31 +66,35 @@ class DeBruijn():
         """
         visited = set()
 
-        def collapse(node: DirectedNode) -> None:
+        def collapse(node: graph_tool.Vertex) -> None:
             visited.add(node)
             value_to_append = []
-            out_nodes_count = node.out_nodes_count
-            out_degree = node.out_degree
-            while out_nodes_count == 1 and out_degree == 1:
-                next_node = node.get_out_node()
+            out_degree = node.out_degree()
+            out_neighbours = node.out_neighbours()
+            while out_degree == 1:
+                for next_node in out_neighbours:
+                    break
                 print('Next node {}'.format(next_node))
-                if next_node.in_nodes_count != 1:
+                if next_node.in_degree() != 1:
                     print('Break on node {}'.format(next_node))
                     break
                 visited.add(next_node)
-                value_to_append.append(next_node.value[self.k - 1:])
-                out_nodes_count = next_node.out_nodes_count
-                out_degree = next_node.out_degree
-                self.nodes.pop(next_node.value)
-                node.out_edges = next_node.out_edges
+                value_to_append.append(self.values[next_node][self.k - 1:])
+                out_degree = next_node.out_degree()
+                out_neighbours = list(next_node.out_neighbours())
+                # self.remove_vertex(next_node)
             if value_to_append:
-                new_value = node.value + ''.join(value_to_append)
-                self.reset_node_value(node.value, new_value)
+                new_value = self.values[node] + ''.join(value_to_append)
+                self.reset_node_value(node, new_value)
 
-        for read in self.nodes.copy():
-            if read not in self.nodes:
+                edge_list = [(node, node1) for node1 in out_neighbours]
+                print(edge_list)
+                self.add_edge_list(edge_list)
+
+        for read in self.vertices():
+            if read not in self.vertices():
                 continue
-            node = self.nodes[read]
+            node = self.vertex(read)
             if node not in visited:
                 collapse(node)
 
@@ -99,20 +140,3 @@ class DeBruijn():
             res.append(step[k:])
         return ''.join(res)
 
-
-    def draw(self, name=None) -> None:
-        g = graph_tool.Graph()
-        visited = {}
-        for vertex in self.nodes:
-            node = self.nodes[vertex]
-            if node not in visited:
-                visited[node] = g.add_vertex()
-            v1 = visited[node]
-            for node_, edges_n in node.out_edges.items():
-                if node_ not in visited:
-                    visited[node_] = g.add_vertex()
-                v2 = visited[node_]
-                g.add_edge(v1, v2, add_missing=False)
-
-        graph_tool.draw.graph_draw(g, vertex_font_size=1, output_size=(500, 500),
-                                   vertex_size=10, vertex_color=[1, 1, 1, 0], output=name)  # vertex_text=g.vertex_index
