@@ -1,12 +1,13 @@
 from collections import defaultdict, namedtuple
 from itertools import chain
+from tqdm import tqdm
 from operator import itemgetter
 from abc import abstractmethod, abstractproperty, ABCMeta
 import typing
 from random import choice
 
-# import graph_tool
-# import graph_tool.draw
+import graph_tool
+import graph_tool.draw
 
 WeightedEdge = namedtuple('WeightedEdge', ['vertex', 'weight'])
 
@@ -167,6 +168,24 @@ class DirectedNode(INode):
             self.out_edges[node] -= 1
         else:
             self.out_edges.pop(node)
+
+    def del_out_node(self, node: 'DirectedNode') -> None:
+        """Delete out node with all it's corresponding edges.
+
+        :param node: Node to delete
+        :return: None
+        """
+        if node in self.out_edges:
+            self.out_edges.pop(node)
+
+    def del_in_node(self, node: 'DirectedNode') -> None:
+        """Delete in node with all it's corresponding edges.
+
+        :param node: Node to delete
+        :return: None
+        """
+        if node in self.in_edges:
+            self.in_edges.pop(node)
 
     @property
     def in_degree(self) -> int:
@@ -510,40 +529,70 @@ class DeBruijnGraph(DirectedGraph):
         node.value = new_value
         self.nodes[new_value] = node
 
+    def build_from_fastq(self, fastq_file_name: str, k: int) -> None:
+        """Build the graph from reads in fastq format
+
+        :param fastq_file_name: Fastq with reads
+        :param k: Size of kmer
+        :return: None
+        """
+        with open(fastq_file_name, 'r') as in_f:
+            for line in tqdm(in_f):
+                # Skip name line
+                read = next(in_f)
+                for i in range(len(read) - k - 1):
+                    value1 = read[i: i + k]
+                    value2 = read[i + 1: i + k + 1]
+                    self.add_edge(value1, value2)
+                next(in_f)  # Skip +
+                next(in_f)  # Skip quality string
+
     def simplify(self) -> None:
         """Turn all paths that contain nodes with one in edge and one out edge into one node.
 
         :return: None
         """
         visited = set()
+        nodes_to_remove = set()
 
         def collapse(node: DirectedNode) -> None:
             visited.add(node)
             value_to_append = []
             out_nodes_count = node.out_nodes_count
-            out_degree = node.out_degree
-            while out_nodes_count == 1 and out_degree == 1:
+            while out_nodes_count == 1:
                 next_node = node.get_out_node()
-                print('Next node {}'.format(next_node))
+                # print('Next node {}'.format(next_node))
                 if next_node.in_nodes_count != 1:
-                    print('Break on node {}'.format(next_node))
+                    # print('Break on node {}'.format(next_node))
                     break
                 visited.add(next_node)
                 value_to_append.append(next_node.value[self.k - 1:])
                 out_nodes_count = next_node.out_nodes_count
-                out_degree = next_node.out_degree
-                self.nodes.pop(next_node.value)
+                nodes_to_remove.add(next_node)
                 node.out_edges = next_node.out_edges
             if value_to_append:
                 new_value = node.value + ''.join(value_to_append)
                 self.reset_node_value(node.value, new_value)
 
         for read in self.nodes.copy():
-            if read not in self.nodes:
-                continue
+            # if read not in self.nodes:
+            #     continue
             node = self.nodes[read]
             if node not in visited:
                 collapse(node)
+        print(self.adjacency_list())
+        print(nodes_to_remove)
+        self.del_nodes(nodes_to_remove)
+
+    def del_nodes(self, nodes: typing.Iterable[DirectedNode]):
+        for node in nodes:
+            for in_node in node.in_nodes():
+                # print('Before {}'.format(in_node.out_edges))
+                in_node.del_out_node(in_node)
+                # print('After {}'.format(in_node.out_edges))
+            for out_node in node.out_nodes():
+                out_node.del_in_node(out_node)
+            self.nodes.pop(node.value)
 
     def adjacency_list(self) -> typing.List[str]:
         """Represent graph as the adjacency list.
@@ -551,9 +600,9 @@ class DeBruijnGraph(DirectedGraph):
         :return: list(str)
         """
         adjacency_list = []
-        for vertex in self.nodes.values():
-            for vertex_ in vertex.out_nodes:
-                adjacency_list.append('{} -> {}'.format(vertex.value, vertex_.value))
+        for in_node in self.nodes.values():
+            for out_node in in_node.out_nodes():
+                adjacency_list.append('{} -> {}'.format(in_node.value, out_node.value))
         return adjacency_list
 
     def draw(self, output_file_name: str=None) -> None:
@@ -564,22 +613,24 @@ class DeBruijnGraph(DirectedGraph):
         """
         graph_to_draw = graph_tool.Graph()
         visited = {}
-        for vertex in self.nodes:
-            node = self.nodes[vertex]
+        print('Nodes to draw {}'.format(self.nodes))
+        for node_value in self.nodes:
+            node = self.nodes[node_value]
             if node not in visited:
                 visited[node] = graph_to_draw.add_vertex()
-            v1 = visited[node]
-            for node_, edges_n in node.out_edges.items():
-                if node_ not in visited:
-                    visited[node_] = graph_to_draw.add_vertex()
-                v2 = visited[node_]
-                graph_to_draw.add_edge(v1, v2, add_missing=False)
+            node1 = visited[node]
+            for out_node in node.out_nodes():
+                if out_node not in visited:
+                    visited[out_node] = graph_to_draw.add_vertex()
+                node2 = visited[out_node]
+                graph_to_draw.add_edge(node1, node2, add_missing=False)
+
         if output_file_name:
-            graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(500, 500),
-                                       vertex_size=10, vertex_color=[1, 1, 1, 0], output=output_file_name)
+            graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(1000, 10),
+                                       vertex_size=1, vertex_color=[1, 1, 1, 0], output=output_file_name)
         else:
-            graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(500, 500),
-                                       vertex_size=10, vertex_color=[1, 1, 1, 0])
+            graph_tool.draw.graph_draw(graph_to_draw) #, vertex_font_size=1, output_size=(1000, 1000),
+                                       # vertex_size=1, vertex_color=[1, 1, 1, 0])
 
     def find_eulerian_path(self) -> None:
         """Find eulerian path in graph. It will be set to eulerian_path graph attribute.

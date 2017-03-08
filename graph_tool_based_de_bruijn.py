@@ -1,4 +1,5 @@
 import graph_tool
+from tqdm import tqdm
 from graph_tool.draw import graph_draw
 import typing
 
@@ -18,7 +19,17 @@ class DeBruijnGraph(graph_tool.Graph):
         self.eulerian_walk = []
         self.k = k
         self.values = self.new_vertex_property('string')
+        self.values_set = set()
         self.indexes = {}
+
+    def build_from_reads(self, reads):
+        k = self.k
+        for read in tqdm(reads):
+            for i in range(len(read) - k):
+                value1 = read[i: i + k]
+                value2 = read[i + 1: i + k + 1]
+                self.add_edge(value1, value2)
+                # print(value1)
 
     def add_edge(self, value1, value2, add_missing=True):
         # ToDo check arguments
@@ -41,12 +52,13 @@ class DeBruijnGraph(graph_tool.Graph):
         vertices are inserted and an iterator over the new vertices is returned.
         This operation is :math:`O(n)`.
         """
-        if value in self.values:
+        if value in self.values_set:
             node = self.vertex(self.indexes[value])
         else:
             node = self.add_vertex()
             self.values[node] = value
             self.indexes[value] = self.vertex_index[node]
+            self.values_set.add(value)
         if return_node:
             return node
 
@@ -65,39 +77,40 @@ class DeBruijnGraph(graph_tool.Graph):
         :return: None
         """
         visited = set()
+        to_remove = []
 
         def collapse(node: graph_tool.Vertex) -> None:
             visited.add(node)
             value_to_append = []
+
             out_degree = node.out_degree()
             out_neighbours = node.out_neighbours()
             while out_degree == 1:
                 for next_node in out_neighbours:
                     break
-                print('Next node {}'.format(next_node))
+                # print('Next node {}'.format(next_node))
                 if next_node.in_degree() != 1:
-                    print('Break on node {}'.format(next_node))
+                    # print('Break on node {}'.format(next_node))
                     break
                 visited.add(next_node)
                 value_to_append.append(self.values[next_node][self.k - 1:])
                 out_degree = next_node.out_degree()
                 out_neighbours = list(next_node.out_neighbours())
-                # self.remove_vertex(next_node)
+                # print('To remove: {}'.format(next_node))
+                to_remove.append(next_node)
             if value_to_append:
                 new_value = self.values[node] + ''.join(value_to_append)
                 self.reset_node_value(node, new_value)
-
                 edge_list = [(node, node1) for node1 in out_neighbours]
-                print(edge_list)
+                # print(edge_list)
                 self.add_edge_list(edge_list)
 
-        for read in self.vertices():
-            if read not in self.vertices():
-                continue
-            node = self.vertex(read)
+
+        for node in self.vertices():
             if node not in visited:
                 collapse(node)
-
+        self.remove_vertex(to_remove)  # Remove only here, since due to internal representation,
+        #  removal cause all vertex indexes to change
 
     def adjacency_list(self) -> typing.List[str]:
         """Represent graph as the adjacency list
