@@ -575,16 +575,13 @@ class DeBruijnGraph(DirectedGraph):
                 self.reset_node_value(node.value, new_value)
 
         for read in self.nodes.copy():
-            # if read not in self.nodes:
-            #     continue
             node = self.nodes[read]
             if node not in visited:
                 collapse(node)
         print(self.adjacency_list())
-        print(nodes_to_remove)
         self.del_nodes(nodes_to_remove)
 
-    def del_nodes(self, nodes: typing.Iterable[DirectedNode]):
+    def del_nodes(self, nodes: typing.Iterable[DirectedNode]) -> None:
         for node in nodes:
             for in_node in node.in_nodes():
                 # print('Before {}'.format(in_node.out_edges))
