@@ -572,7 +572,7 @@ class DeBruijnGraph(DirectedGraph):
                 nodes_to_remove.add(next_node)
                 node.out_edges = next_node.out_edges
                 if len(node.out_edges) > 1:
-                    print('Fuck {}'.format(node.get_out_node().value[self.k - 1:]))
+                    print('Last value to append {}'.format(node.get_out_node().value[self.k - 1:]))
 
 
             if value_to_append:
