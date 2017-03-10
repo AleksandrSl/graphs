@@ -38,14 +38,12 @@ class TestGraph(unittest.TestCase):
         node[4].add_in_edges(node[1], node[5])
         self.assertNotEqual(node[0], node[4])  # Node values differ
         self.assertEqual(node[0], node[3])  # In_edges equal, values equal
-        self.assertNotEqual(node[1], node[2])  # In_edges not equal, values equal
 
         node[4].add_out_edges(node[1])
         node[5].add_out_edges(node[3])
         node[2].add_out_edges(node[3])
 
         self.assertEqual(node[5], node[4])  # Out_edges equal, values equal
-        self.assertNotEqual(node[0], node[3])  # Out_edges not equal, values equal
 
 
 if __name__ == '__main__':
