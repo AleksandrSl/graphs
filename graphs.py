@@ -510,12 +510,11 @@ class UndirectedGraph(Graph):
 
 class DeBruijnGraph(DirectedGraph):
 
-    def __init__(self, k) -> None:
+    def __init__(self) -> None:
         """
         :param k: k-mer length
         """
         self.eulerian_path = []
-        self.k = k
         super().__init__()
 
     def reset_node_value(self, old_value: str, new_value: str) -> None:
@@ -536,16 +535,18 @@ class DeBruijnGraph(DirectedGraph):
         :param k: Size of kmer
         :return: None
         """
+        self.k = k
         with open(fastq_file_name, 'r') as in_f:
             for line in tqdm(in_f):
                 # Skip name line
-                read = next(in_f)
-                for i in range(len(read) - k - 1):
+                read = next(in_f).strip()
+                for i in range(len(read) - k):
                     value1 = read[i: i + k]
                     value2 = read[i + 1: i + k + 1]
                     self.add_edge(value1, value2)
                 next(in_f)  # Skip +
                 next(in_f)  # Skip quality string
+
 
     def simplify(self) -> None:
         """Turn all paths that contain nodes with one in edge and one out edge into one node.
@@ -570,6 +571,10 @@ class DeBruijnGraph(DirectedGraph):
                 out_nodes_count = next_node.out_nodes_count
                 nodes_to_remove.add(next_node)
                 node.out_edges = next_node.out_edges
+                if len(node.out_edges) > 1:
+                    print('Fuck {}'.format(node.get_out_node().value[self.k - 1:]))
+
+
             if value_to_append:
                 new_value = node.value + ''.join(value_to_append)
                 self.reset_node_value(node.value, new_value)
@@ -609,24 +614,31 @@ class DeBruijnGraph(DirectedGraph):
         :return: None
         """
         graph_to_draw = graph_tool.Graph()
+        print(len(self.nodes))
         visited = {}
+        values = graph_to_draw.new_vertex_property('string')
         print('Nodes to draw {}'.format(self.nodes))
         for node_value in self.nodes:
             node = self.nodes[node_value]
             if node not in visited:
                 visited[node] = graph_to_draw.add_vertex()
             node1 = visited[node]
+            values[node1] = node.value[:self.k]
             for out_node in node.out_nodes():
                 if out_node not in visited:
                     visited[out_node] = graph_to_draw.add_vertex()
                 node2 = visited[out_node]
+                values[node2] = out_node.value[-self.k:]
                 graph_to_draw.add_edge(node1, node2, add_missing=False)
 
+        print(values)
         if output_file_name:
             graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(1000, 10),
                                        vertex_size=1, vertex_color=[1, 1, 1, 0], output=output_file_name)
         else:
-            graph_tool.draw.graph_draw(graph_to_draw) #, vertex_font_size=1, output_size=(1000, 1000),
+            graph_tool.draw.graph_draw(graph_to_draw,nodesfirst=True, vertex_text=values,
+                                       vertex_size = 0.1, vertex_font_size=10, edge_pen_width = 5,
+                                       edge_color=[255, 255, 0, 1]) #, vertex_font_size=1, output_size=(1000, 1000),
                                        # vertex_size=1, vertex_color=[1, 1, 1, 0])
 
     def find_eulerian_path(self) -> None:
