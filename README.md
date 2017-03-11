@@ -5,9 +5,9 @@ Work with python3
 
 Simple example:
 
-This will build the graph from file simple_reads.fastq with k = 3 and draw it in interactive window
+This will build the graph from file simple_reads.fastq with k = 3 and draw it in interactive window with full nodes values
 ```
-./main.py --fastq simple_reads.fastq -k 3 --draw
+./main.py --fastq simple_reads.fastq -k 3 --draw -f
 ```
 
 

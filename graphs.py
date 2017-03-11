@@ -607,7 +607,7 @@ class DeBruijnGraph(DirectedGraph):
                 adjacency_list.append('{} -> {}'.format(in_node.value, out_node.value))
         return adjacency_list
 
-    def draw(self, output_file_name: str=None) -> None:
+    def draw(self, output_file_name: str=None, draw_full_nodes: bool=False) -> None:
         """Draw graph to screen or to file if output_file_name is provided.
 
         :param output_file_name: File to draw graph to
@@ -623,11 +623,12 @@ class DeBruijnGraph(DirectedGraph):
             if node not in visited:
                 visited[node] = graph_to_draw.add_vertex()
             node1 = visited[node]
-            values[node1] = node.value[:self.k]
+            values[node1] = node.value if draw_full_nodes else node.value[:self.k]
             for out_node in node.out_nodes():
                 if out_node not in visited:
                     visited[out_node] = graph_to_draw.add_vertex()
                 node2 = visited[out_node]
+                values[node2] = out_node.value  if draw_full_nodes else out_node.value[-self.k:]
                 values[node2] = out_node.value[-self.k:]
                 graph_to_draw.add_edge(node1, node2, add_missing=False)
 
