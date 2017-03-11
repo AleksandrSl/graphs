@@ -7,7 +7,7 @@ Install requirements via:
 ```
 pip install -r requirements.txt
 ```
-If you want to draw graphs, install graph-tool(https://git.skewed.de/count0/graph-tool/wikis/installation-instructions) manually
+If you want to draw graphs, install [graph-tool](https://git.skewed.de/count0/graph-tool/wikis/installation-instructions) manually
 
 Simple example:
 
