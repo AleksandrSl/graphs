@@ -571,8 +571,8 @@ class DeBruijnGraph(DirectedGraph):
                 out_nodes_count = next_node.out_nodes_count
                 nodes_to_remove.add(next_node)
                 node.out_edges = next_node.out_edges
-                if len(node.out_edges) > 1:
-                    print('Last value to append {}'.format(node.get_out_node().value[self.k - 1:]))
+                # if len(node.out_edges) > 1:
+                #     print('Last value to append {}'.format(node.get_out_node().value[self.k - 1:]))
 
 
             if value_to_append:
@@ -583,7 +583,7 @@ class DeBruijnGraph(DirectedGraph):
             node = self.nodes[read]
             if node not in visited:
                 collapse(node)
-        print(self.adjacency_list())
+        # print(self.adjacency_list())
         self.del_nodes(nodes_to_remove)
 
     def del_nodes(self, nodes: typing.Iterable[DirectedNode]) -> None:
@@ -614,10 +614,10 @@ class DeBruijnGraph(DirectedGraph):
         :return: None
         """
         graph_to_draw = graph_tool.Graph()
-        print(len(self.nodes))
+        # print(len(self.nodes))
         visited = {}
         values = graph_to_draw.new_vertex_property('string')
-        print('Nodes to draw {}'.format(self.nodes))
+        # print('Nodes to draw {}'.format(self.nodes))
         for node_value in self.nodes:
             node = self.nodes[node_value]
             if node not in visited:
@@ -631,7 +631,7 @@ class DeBruijnGraph(DirectedGraph):
                 values[node2] = out_node.value[-self.k:]
                 graph_to_draw.add_edge(node1, node2, add_missing=False)
 
-        print(values)
+        # print(values)
         if output_file_name:
             graph_tool.draw.graph_draw(graph_to_draw, vertex_font_size=1, output_size=(1000, 10),
                                        vertex_size=1, vertex_color=[1, 1, 1, 0], output=output_file_name)
